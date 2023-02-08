@@ -1,0 +1,717 @@
+---
+title: "Exploratory Data Analysis and Identifying riskiness of loan"
+output: html_document
+---
+
+* Introduction
+  + Dataset Overview
+  + Goal of the project
+  + Modelling  
+
+* Pre-Processing and Feauture selection
+  + Selecting variables
+  + load libraries
+  + Dealing with null values
+
+* Transformation and Inspecting variables
+  + Transformation of Job type, Savings.account,Purpose predictors 
+  + Exploring transformation
+  + Transformation of countinous variables and eda
+  + Multivariate Transformation and Inspection
+  + Checking Multicolinearity
+  + Summary and Findings
+
+* Model 
+  + Introduction of model
+  + Fitting logistic Regression Model
+  + Analyzing result 
+    * Interpretation of coefficents
+    * Evaluating Model Perfomance 
+    * Improving Model perfomance by balancing the target variable
+   
+* Summary and Conclusion
+    
+## 1.Introduction and Context  
+
+**Data**: My [dataset](https://www.kaggle.com/uciml/german-credit/kernels) contains information about 1000 german individual and their credit line and loans,including nine different parameters like age, sex, job, housing etc.Each row represent a person who has taken a loan. 
+
+**Goal**: By using nine different parameters given in the dataset, we try to indentify riskiness of a loan and classified them into gooad and bad.Here, I am trying to explain how given parameters affecting riskiness of loan. 
+
+   * Good Loan: It is a good investment from bank perspective and more likely recover the                  loan. 
+   * Bad Loan: It is a bad investment from bank perpective and less likely to recover the                 loan, more chances of default.
+
+Thus, it is utmost important to identify a loan correctly, if we identify a good loan as bad loan turns into business loss. on the other hand, if we identify a bad loan as a good loan turns into financial distress. 
+
+**Modelling**: I will bulid logistic regression and evaluate the risks associated with other parameters while lending money to a loan applicant. We are trying to optimised result and helping a bank to set the decision parameters in identifying loan is a good or bad investment. 
+
+*
+### Important Note:
+
+When I built the model by using the original dataset, the ratio of precision and recall was too law. It means the model was falsely identifying bad loan as a good loan. In business terms, we build the model to maximize profit and to minimize loss. However, here the classification made by the model would increase the risk of bad debt; eventually, it will convert in a financial loss for a bank.
+
+The reason is why model predicting bad loan as a good because the ratio of good loan to the bad loan was 70:30. The values of the good loan were far higher than a bad loan in the target variable because of this reason I found the model was giving biased output and inclined towards the values of a good loan.
+
+To overcome this imbalanced data, I used sampling method which modify the data into balanced distribution. In this analysis, I applied the oversampling method to balance minority class in the target variable.  
+
+
+## 2.Pre-Processing and Feauture selection
+
+*
+#### Selecting variables 
+
+Here risk is a dependent variable and other nine variable those are explonatary varible helps us to understand riskiness while lending a loan to customers.
+
+* **Risk**:The variable we are trying to explain called as response variable.
+* **Age**:Borrower's age in years  
+* **Sex**:Borrower's sex(male or female) 
+* **Job**:Types of Job    
+* **Housing**:  Borrower's housing type
+* **Saving accounts**:Type of savings account that shows tendency of borrowers for 
+saving
+* **Checking account**:Balance in checking account(Currency:DM - Deutsch Mark)
+* **Credit amount**:Credit line used by account holder.
+* **Duration**:loan duration in months 
+* **Purpose**:Purpose of loan 
+
+
+```{r}
+#load data
+
+data <- read.csv("../input/orginaldata/germanCreditRisk_originalData.csv")
+
+```
+
+```{r,echo=TRUE,message=FALSE,warning=FALSE}
+#load library
+library(ROSE)
+library(tidyverse)
+library(gridExtra)
+library(plyr)
+library(knitr)
+library(caret)
+library(caTools)
+library(DMwR)
+```
+
+```{r}
+# Checking basic structure and dimension of the dataset
+
+dim(data)
+str(data)
+
+```
+
+
+* Some of the variables type need to be transform for better analysis and comparison.
+First variable **X** is just a serial number, we can get rid of the serial number.
+
+```{r}
+
+data$X <- NULL
+
+```
+
+
+
+```{r}
+#Taking care of missing data
+
+sapply(data, function(x) sum(is.na(x)))
+
+```
+
+```{r}
+#Replacing Null Values with mode
+
+data$Saving.accounts[is.na(data$Saving.accounts)]=
+  names(table(data$Saving.accounts))[table(data$Saving.accounts)==max(table(data$Saving.accounts))]
+
+
+data$Checking.account[is.na(data$Checking.account)]=
+  names(table(data$Checking.account))[table(data$Checking.account)==max(table(data$Checking.account))]
+
+```
+
+## 3.Transformation and Inspecting variables
+
+*
+#### Transformation of Job type, Savings.account,Purpose predictors  
+
+```{r}
+
+data$Job=as.factor(data$Job)
+table(data$Job)
+table(data$Saving.accounts)
+table(data$Purpose)
+
+#Job Type
+
+data$Job <- mapvalues(data$Job,from =c("0","1","2","3"),
+                      to = c("Unskilled","Unskilled","Skilled","Highly Skilled"))
+
+#Type of Savings.account
+
+data$Saving.accounts <- mapvalues(data$Saving.accounts,from =c("little","moderate","quite rich","rich"), to = c("little","moderate","moderate","moderate"))
+
+#Purpose of the loan
+
+data$Purpose <- mapvalues(data$Purpose,from = c("business","car","domestic appliances",
+                "education","furniture/equipment","radio/TV","repairs","vacation/others"), 
+                to = c("business","car","furniture/equipment","education",
+                       "furniture/equipment","radio/TV","others","others")) 
+
+```
+
+*
+#### Exploring Transformation
+
+```{r}
+g3 <- ggplot(data,aes(x=Job,fill = Job)) +
+  geom_bar()+
+  ggtitle("Type of Jobs")+
+theme_bw()+
+      theme(axis.text = element_text(size=12,face = "bold"),
+            legend.text = element_text(size = 12),
+            axis.title.x = element_blank(),
+            axis.title.y = element_blank(),
+            panel.grid.major = element_blank(),
+            panel.grid.minor = element_blank(),
+            panel.border = element_blank(),
+            axis.line = element_line(colour = "black")) +
+  theme(legend.position="bottom")
+  
+table(data$Saving.accounts)
+
+
+g4 <- ggplot(data,aes(x=Saving.accounts,fill=Saving.accounts))+
+  geom_bar()+
+  ggtitle("Types of savings account")+
+  theme_bw()+
+      theme(axis.text = element_text(size=12,face = "bold"),
+            legend.text = element_text(size = 12),
+            axis.title.x = element_blank(),
+            axis.title.y = element_blank(),
+            panel.grid.major = element_blank(),
+            panel.grid.minor = element_blank(),
+            panel.border = element_blank(),
+            axis.line = element_line(colour = "black")) +
+  theme(legend.position="bottom")
+
+ grid.arrange(g3, g4, nrow=1)
+
+  
+
+```
+
+```{r}
+
+data_filter<- data.frame(table(data$Purpose))
+names(data_filter)=c("Purpose","counts")
+ggplot(data_filter)+geom_bar(aes(x=reorder(Purpose,+counts),y= counts,fill = Purpose), stat="identity")+ xlab("")+ ylab("")+ ggtitle("")+ theme(legend.position = "none",axis.text = element_text(face = "bold"),plot.title = element_text(colour = "darkorange",face = "bold"))+
+  coord_flip() 
+
+```
+
+```Job```
+
+There was sparse level in Job Types. So I grouped category and convert into two category Skilled and Unskilled. 
+
+```savings.account```
+
+I transformed all the four variable of savings.account to get a more clear understanding of the underlying scenario. Little was more when compared to other three. Hence, I merged other three variable and compared it to little to understand the pattern.
+
+```Purpose of loan```
+
+There were a sparse value in this variable, category repairs and other/vacation was having less amount of example. So, I grouped them into single category named others. 
+
+* Observation
+  + People who are skilled and highly skilled tend to apply more for credit.
+  + By analysing Checking.account, most of the client having little amount of wealth.
+  + People are more likely to apply for two basic reason to buy car and radio/tv. 
+
+
+*
+#### Transformation of  Countinous Variables and eda
+
+Thare was two countinous variables and I inspect by creating histogram to check skewness in variable.
+
+```{r}
+g1 <-  ggplot(data,aes(x = Age)) + 
+  geom_histogram(bins = 20, fill = 'blue', colour = 'black') + 
+  ggtitle('Age Distribution') + 
+  xlab('Age') +
+  ylab('Frequency')
+
+g2 <- ggplot(data,aes(x = Credit.amount)) + 
+  geom_histogram(bins = 20, fill = 'red', colour = 'black') + 
+  ggtitle('Credit_Amount Distribution') + 
+  xlab('Credit_Amount') +
+  ylab('Frequency')
+
+grid.arrange(g1, g2, nrow=1)
+
+
+```
+
+* Observation:
+
+We can see both ```Age``` and ```Credit_Amount``` are right skewed.So, I used ```log1p``` function to transform skewness in normal distribution.
+
+
+```{r}
+#Transforming variables
+
+g1 <-  ggplot(data,aes(x = log1p(Age))) + 
+  geom_histogram(bins = 20, fill = 'blue', colour = 'black') + 
+  ggtitle('Age Distribution') + 
+  xlab('Age') +
+  ylab('Frequency')
+
+g2 <- ggplot(data,aes(x = log1p(Credit.amount))) + 
+  geom_histogram(bins = 20, fill = 'red', colour = 'black') + 
+  ggtitle('Credit_Amount Distribution') + 
+  xlab('Credit_Amount') +
+  ylab('Frequency')
+
+grid.arrange(g1, g2, nrow=1)
+
+
+```
+
+**Age**
+
+Log transformation of age helps to improve our distributon. ```Age``` variable is still slightly right skew;however it is much better distribution than eralier.
+
+*
+#### Multivariate Transformation and Inspection 
+
+##### Dependent ~ Independent relationship
+
+##### Gender vs Credit.Amount
+
+```{r}
+
+ggplot(data, aes(x=log1p(Credit.amount), fill=Sex)) +
+  geom_density(alpha=0.5) +
+  ggtitle('Distribution of Credit.amount by Gender') +
+  xlab("Credit.Amount") + 
+  ylab("Density") 
+
+```
+
+* Observation
+  + There is good assosiation between male and female loan application, but female             applicant getting slightly higher credit than male. 
+
+```{r}
+ggplot(data,aes(x=Risk, fill=Sex)) +
+  geom_bar(position='dodge') + 
+  ggtitle("Proportion of Good and Bad loan by Sex")+ 
+  
+      theme_bw()+
+      theme(axis.text = element_text(size=12,face = "bold"),
+            legend.text = element_text(size = 12),
+            axis.title.x = element_blank(),
+            axis.title.y = element_blank(),
+            panel.grid.major = element_blank(),
+            panel.grid.minor = element_blank(),
+            panel.border = element_blank(),
+            axis.line = element_line(colour = "black"))
+ 
+
+```
+
+* Observation
+  + The number of male applicant almost double than female.
+  + The more risk assosicated with female loan applicant. 
+
+```{r}
+ggplot(data, aes(x=Purpose, y=Credit.amount, fill=Purpose)) +
+  geom_boxplot() + coord_flip()
+
+```
+
+* I created age group to inspect more, we can analyze which group applied more for loan and which group carrying more riskiness.
+
+```{r}
+# Categorical age
+
+data <- data %>% mutate(
+  AgeCategories = case_when(
+    Age >= 18 & Age < 35 ~ 'Young adult',
+    Age >= 35 & Age < 60 ~ 'Middle Aged',
+    Age >= 60 ~ 'Elderly',
+    TRUE ~ as.character(NA)
+  )
+)
+data$AgeCategories %>% table(useNA='always')
+
+```
+
+
+```{r}
+
+ ggplot(data, aes(x=AgeCategories, y=Credit.amount, fill=AgeCategories)) +
+ geom_bar(stat="identity")+
+ theme_minimal()+
+ scale_fill_brewer(palette="Blues")+
+ ggtitle("Credit_Amount age group ")+
+ theme(legend.position="none")+
+ theme_bw()+
+ theme(axis.text = element_text(size=12,face = "bold"),
+            legend.text = element_text(size = 12),
+            axis.title.x = element_blank(),
+            axis.title.y = element_blank(),
+            panel.grid.major = element_blank(),
+            panel.grid.minor = element_blank(),
+            panel.border = element_blank(),
+            axis.line = element_line(colour = "black"))
+```
+
+* Observation
+  + People who fall between age 18 to 35 are applying more for loan will have to inspect       the riskiness associated with this group. It is also intresting to know why this           group is applying for more credit.
+
+```{r}
+
+table(data$Housing)
+
+a1 <- ggplot(data,aes(x=Risk, fill=Housing)) +
+  geom_bar(position='dodge') + 
+  ggtitle("Loan Risk by housing type")+ 
+  
+      theme_bw()+
+      theme(axis.text = element_text(size=12,face = "bold"),
+            legend.text = element_text(size = 12),
+            axis.title.x = element_blank(),
+            axis.title.y = element_blank(),
+            panel.grid.major = element_blank(),
+            panel.grid.minor = element_blank(),
+            panel.border = element_blank(),
+            axis.line = element_line(colour = "black")) +
+  theme(legend.position="bottom")
+
+   
+a2<- ggplot(data,aes(x=Risk, fill=Saving.accounts)) +
+  geom_bar(position='dodge') + 
+  ggtitle("Loan Risk by Savings.account")+ 
+  
+      theme_bw()+
+      theme(axis.text = element_text(size=12,face = "bold"),
+            legend.text = element_text(size = 12),
+            axis.title.x = element_blank(),
+            axis.title.y = element_blank(),
+            panel.grid.major = element_blank(),
+            panel.grid.minor = element_blank(),
+            panel.border = element_blank(),
+            axis.line = element_line(colour = "black")) +
+  theme(legend.position="bottom")
+
+     
+
+grid.arrange(a1,a2,nrow=1)
+
+
+
+```
+
+* Observation
+  + There is more probabolity of considering loan being risk for people who are having less     amount is savings account.
+  + The good things about bank most of the client own the house.We can clearly notice that     the proportion of people who own the house is significantly higher than other two          groups. 
+
+
+*
+#### Checking Correlation between countinous variables(Multicolinearity)
+
+```{r,warning=FALSE,message=FALSE}
+
+data <- data %>% mutate(LogAge = log(Age),
+                    Log1pCredit.amount = log1p(Credit.amount))
+
+print(cor(data$LogAge,data$Log1pCredit.amount))
+
+p1 <- ggplot(data,aes(x=LogAge, y=Log1pCredit.amount)) +
+  geom_point(colour = "red") +
+  geom_smooth(method='lm') + 
+  ggtitle('Age vs Credit.amount') + 
+  xlab('Age') +
+  ylab('Credit.amount')
+
+print(cor(data$Log1pCredit.amount, data$Duration))
+
+p2 <- ggplot(data,aes(x=Log1pCredit.amount, y= Duration)) +
+  geom_point(colour = "red") +
+  geom_smooth(method='lm') + 
+  ggtitle('Duration vs Age') + 
+  xlab('Duartion') +
+  ylab('Credit.amount')
+
+print(cor(data$Duration, data$LogAge))
+
+p3 <- ggplot(data,aes(x=Duration, y=LogAge)) +
+  geom_point(colour = "red") +
+  geom_smooth(method='lm') + 
+  ggtitle('Duration vs Age') + 
+  xlab('Duartion') +
+  ylab('Credit.amount')
+
+grid.arrange(p1,p2,p3,nrow = 1)
+
+```
+
+* Observation
+  + To inspect multicolinearity between countinous variable in the data as presence of         multicolinearity disorts the standard error of coefficent and leadig to problem for        conducting t-test.
+  + There was no significant correlation between countinous variable.
+
+*
+#### Summary
+
+  * No multicolinearity
+  * Highest distribution of credit amount to car,radio/tv and equipment.
+  * More risk factor associated with female client than male.
+  * We should inspect the reasons why particular age group appilyng for more credit.
+  * Housing type and client has correlation with riskiness of loan.
+
+
+## 4.Modeling
+
+I am building a logistic regression model to predict the riskiness of the loan. Many elements in the dataset would help to identify the characteristic of the risk part resides in the loan. The proportion of good credit to the bad loan was 70%, we can say that there 30% chances of the default or it will probably create financial distress for the bank.
+
+I will run baseline model to check how independent variable helping to identify the loan being good or bad. After reading the result of the coefficient of variation, we will decide which variable to keep and which variable to exclude from our analysis.
+
+```{r}
+data$LogAgestd <- scale(data$LogAge)
+data$Log1pCredit.amountstd <- scale(data$Log1pCredit.amount)
+
+```
+
+* To make comparison better and accurate, I scaled logged value.Scaling basically normalizing tha data distribute in aparticular range will speep up algoritham perfomance. 
+
+*
+#### Fitting Logistic Regression 
+
+```{r}
+
+classifier = glm(formula = Risk ~                  Age+Sex+Job+Housing+Saving.accounts+Checking.account+Duration+Purpose+LogAgestd+Log1pCredit.amountstd,family = binomial,data = data)
+
+summary(classifier)
+
+```
+
+* Observation
+
+There are many variables which did not helping to identify the riskiness in the loan. Simply, we can exclude all those variable which are not significant. We will only keep Savings.account, Checking.account, Duration and Housing as independent variable to predict the riskiness. Before, splitting the dataset into train and test, it would be better to understand the statistical significant of coefficient.
+
+*
+#### Interpreting coefficients
+
+```{r}
+# Exponentiated logistic regression coefficients
+
+classifier %>% coefficients %>% exp %>% round(3)
+```
+
+* I run the exponential function to interpret percentage variation of particular predictor in our dataset and how well it contributing in explaining it effects in the model. (I am only explaining those coefficient which looks significant for our model )
+
+```Savings.accounts```: The odds of loan being good 100*(1.659 - 1) = 65.9% higher if the client maintain sufficient amount in their saving account. There are two types of savings account in Saving.account variable, but model converted the independent varaiable Saving.account into moderateSavingaccount, it means model picking moderateSaving account as baseline and converted into dummy variable. We can interpret that if saving account classify as little it would increase hazard rate for loan default by 34.1%.
+
+```Duration```: The odds of loan being good 100*(1-956)=4.4% less if the duration of the loan is longer. 
+
+```Checking.account```: Bank classifying checking account into little, moderate and rich. The model converting little and moderate accounts into moderate and making it dummy variable for prediction. The odds of loan being good (1-0.615)=38.5% less if classify as moderate account. On the other side if the account classify as rich it will increasing probability of loan being good and reduce financial burden by 100*(1.085 - 1) = 8.5%.
+
+```Housing```: Housing variable converted into dummy variable. We can notice from the estimate that the person who owns the house has positive correlation with loan quality. When person owns the house it increase probability of loan being good by 100*(1.62-1)=62%.     
+
+
+```{r}
+
+cleanData <- read.csv("../input/creditriskanalysis/cleanData.csv")
+
+```
+
+
+
+
+*
+#### Evaluating predictive performance
+
+I split the data into training and test to check the validity of the model more accurately. I saved the data on which I perform featuring engineering earlier as filename.csv to avoid transformation process again into train and test data
+
+```{r}
+# Splitting the dataset into training and test
+
+set.seed(123)
+
+split = sample.split(cleanData$Risk,SplitRatio = 0.80)
+training_set = subset(cleanData,split == TRUE)
+test_set = subset(cleanData,split == FALSE)
+
+
+#Fitting the logistic regression into training_set
+
+
+classifier1 = glm(formula = Risk ~ Duration + Housing + Saving.accounts + Checking.account, family = binomial("logit"),data = training_set)
+
+#Predicting train result 
+prob_pred = predict(classifier1,type = 'response',newdata = training_set[-11])
+y_pred1 = ifelse(prob_pred > 0.5,"good","bad")
+
+#Predicting test result 
+prob_pred = predict(classifier1,type = 'response',newdata = test_set[-11])
+y_pred2 = ifelse(prob_pred > 0.5,"good","bad")
+
+cm1 = table(training_set[,11], y_pred1)
+cm1
+
+cm2 = table(test_set[,11], y_pred2)
+cm2
+
+```
+
+```{r}
+#Confusion matrix
+
+cm1 = table(training_set[,11], y_pred1)
+cm1
+
+cm2 = table(test_set[,11], y_pred2)
+cm2
+
+
+```
+
+```{r}
+
+#Calculating accuracy, precision and recall(train)
+
+accuracytrain = (44+527) / 800
+precisiontrain = 44 / 240
+recalltrain = 44/77
+
+accuracytrain
+precisiontrain
+recalltrain
+
+#Calculating accuracy, precision and recall(test)
+
+accuracytest = (10+133) / 200
+precisiontest = 10 / 60
+recalltest = 7/17
+
+accuracytest
+precisiontest
+recalltest
+
+
+
+
+
+```
+
+
+**Accuracy**: The accuracy of the model is similar in the both training and test dataset, approx. 71% of the time model classifying loan coreectly in both the set.
+
+**Precision**: When the model predicts loan being good or bad, it is only correctly identify 16.67% of the time.(type 2 error)
+
+**Recall**:The model approx. 41.17% of the time classify the loan being risky for the bank.
+
+
+*
+#### Summary 
+
+I created baseline model to predict riskiness of the loan and probabilities of default. This model will help bank to determine which applicants should be accepted for loan and which applicants should not be.
+
+* Interpretation
+  + Prediction : The precision ratio is very low and alarming that model could not identifying bad loan correctly. When we compare accuracy with precision and recall the result seems different and it fails to explain the accuracy in the model.. We can consider as it type 2 error as the model fails to identify the bad loan as bad when it is actually bad. The other reason could be possible why model bias towards good loan, the proportion of good loan to bad loan was 70% in the original dataset. It might be possible that more values classified as good so more favourable towards it. 
+
+There are lot of categorical variable in the dataset, to improve model performance we must check collinearity in the categorical variable.We can also use other classification model to make prediction accurate like KNN or Random Forest Classification model.
+
+*
+#### Improving model perfomance by balancing traget variable
+
+```{r}
+smote <- read.csv("../input/creditriskanalysis/cleanData.csv")
+
+```
+
+
+```{r}
+smotedata <- SMOTE(Risk ~ ., smote,prec.over = 400, k = 5 )
+```
+
+```{r}
+
+smoteclassifier = glm(formula = Risk ~ Age+Sex+Job+Housing+Saving.accounts+Checking.account+Duration+Purpose+LogAgestd+Log1pCredit.amountstd,family = binomial,data =smotedata)
+
+```
+
+
+```{r}
+set.seed(300)
+
+split = sample.split(smotedata,SplitRatio = 0.80)
+training_smote = subset(smotedata,split == TRUE)
+test_smote = subset(smotedata,split == FALSE)
+
+
+
+classifier5 = glm(formula = Risk ~ Sex + Job +  Housing + Checking.account + Duration  ,family = binomial,data =smotedata)
+
+
+#Predicting train result 
+pred1 = predict(classifier5,type = 'response',newdata = training_smote[-11])
+y_predsmote = ifelse(pred1 > 0.5,"good","bad")
+
+#Predicting test result 
+pred2 = predict(classifier5,type = 'response',newdata = test_smote[-11])
+y_predsmote1 = ifelse(pred2 > 0.50,"good","bad")
+
+cmsmote1 = table(training_smote[,11], y_predsmote)
+cmsmote1
+
+cmsmote = table(test_smote[,11], y_predsmote1)
+cmsmote
+
+```
+
+```{r}
+#Calculating accuracy, precision and recall(train)
+
+accuracysmotetrain = (348+741) / 1575
+precisionsmotetrain = 348 / 675
+recallsmotetrain = 348/687
+
+accuracysmotetrain
+precisionsmotetrain
+recallsmotetrain
+
+#Calculating accuracy, precision and recall(test)
+
+accuracytsmoeteest = (118+238) / 525
+precisionsmoetetest = 118 / 225
+recallsmotetest = 118/180
+
+accuracytsmoeteest
+precisionsmoetetest
+recallsmotetest
+
+```
+
+**Accuracy**: The accuracy of the model is approximately similar in the both training and test dataset, approx. 68% of the time model classifying loan coreectly in both the set.
+
+**Precision**: When the model predicts loan being good or bad, it is correctly identify 52.44% of the time, which is good improvemrnt then earlier prediction.
+
+**Recall**:The model approx. 65.55% of the time classify the loan being risky for the bank.
+
+
+## 5.Summary and Conclusion 
+
+* Analysis
+  + To improve model perfomance, I used sampling methods and oversampled the data to balance the distrubution of minorty class in the target variable. By doing oversampling, the model is giving more accurate output and increase the ratio of precision(65.55%) and 
+recall(52.44%). The precision has increased by almost 45%, which I think is a good improvement in predictive model.
+  + We performed detail explonatory data analysis on different categorical as well as countinous variable. By doing EDA we found sparse values in the variables and removed sparsity in all variables to analyse and measure accurate variation of all these independent variables on the target variables.
+  + Important skills, I have learnt drom this projects are following.
+    
+    1. Interpretation of coeffiecint 
+    2. Standardizing of log transform values makes more sense in interpretation
+    3. How imbalanced data could make difference in prediction 
+    4. How logistic regression converting categorical variables into dummy variables while there more than one subcategory in the predictor.
+    
+  + I would like to explore multivariate data analysis to know more precise relation between variables and how they are explaining target variables. For instance, there serval puropses for people had taken a loan. How different housing type of checking.account and savings.account explaning target variable.  
